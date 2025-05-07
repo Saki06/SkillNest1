@@ -554,8 +554,8 @@ const ShowcasesPage = () => {
 
       {/* Add/Edit Showcase Modal - LinkedIn-style */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-center z-50 p-5">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
             <div className="border-b border-gray-200 p-4">
               <div className="flex justify-between items-center">
                 <h4 className="text-lg font-semibold text-gray-800">
