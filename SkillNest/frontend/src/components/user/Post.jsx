@@ -16,6 +16,8 @@ const Post = ({
   isFollowing,
   updateFollowingState,
   refreshFollowing,
+  onPostUpdated,
+  onPostDeleted,
 }) => {
   const {
     user: postUser = {},

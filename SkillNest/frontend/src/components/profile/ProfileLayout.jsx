@@ -5,18 +5,26 @@ import { toast } from 'react-toastify';
 import API from '../../api/axios';
 import Navigation from '../user/Navigation';
 import defaultProfile from '../../assets/profilepicture.jpg';
+import { Upload,Trash2 } from 'lucide-react';
+import AboutSection from '../profile/AboutSection';
+import SkillsSection from '../profile/SkillsSection';
+import ShowcasesesSection from '../profile/ShowcasesSection';
+import DocumentsSection from '../profile/DocumentsSection';
+import Recommendation from '../profile/RecommendationsSection';
+import PostSection from '../profile/PostsSection';
+
+
 
 const ProfileLayout = () => {
   // State management
   const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIs_loading] = useState(true);
   const [error, setError] = useState(null);
   const [isEditingHeader, setIsEditingHeader] = useState(false);
   const [editName, setEditName] = useState('');
   const [editHeadline, setEditHeadline] = useState('');
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
 
-  
   // Hooks
   const location = useLocation();
   const navigate = useNavigate();
@@ -24,44 +32,42 @@ const ProfileLayout = () => {
   // Data fetching
   const fetchUser = async () => {
     try {
-      setIsLoading(true);
+      setIs_loading(true);
       setError(null);
       const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
       const userId = savedUser?._id || savedUser?.id;
-  
+
       if (!userId) throw new Error('Please log in to view your profile');
-  
+
       const token = localStorage.getItem('token');
       const config = token ? {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000
       } : {};
-  
+
       const res = await API.get(`/auth/users/${userId}`, config);
       if (!res.data) throw new Error('No user data returned');
-  
+
       setUser(res.data);
       setEditName(res.data.name || '');
       setEditHeadline(res.data.headline || '');
       localStorage.setItem('user', JSON.stringify(res.data));
-  
-      // ✅ FIXED MAPPING HERE
+
       const countRes = await API.get(`/auth/users/${userId}/counts`, config);
       setCounts({
         followers: countRes.data.followersCount || 0,
         following: countRes.data.followingCount || 0,
       });
-  
     } catch (err) {
       console.error('Failed to fetch user:', err);
       setError(err.response?.data?.message || err.message || 'Failed to load profile');
       toast.error(err.response?.data?.message || err.message || 'Failed to load profile');
       if (err.response?.status === 401) navigate('/login');
     } finally {
-      setIsLoading(false);
+      setIs_loading(false);
     }
   };
-  
+
   useEffect(() => {
     fetchUser();
   }, []);
@@ -81,7 +87,7 @@ const ProfileLayout = () => {
     }
 
     try {
-      setIsLoading(true);
+      setIs_loading(true);
       const token = localStorage.getItem('token');
       if (!token) throw new Error('Please log in');
 
@@ -103,7 +109,7 @@ const ProfileLayout = () => {
       console.error('Upload failed:', err);
       toast.error(err.response?.data?.message || err.message || 'Failed to upload cover image');
     } finally {
-      setIsLoading(false);
+      setIs_loading(false);
     }
   };
 
@@ -121,7 +127,7 @@ const ProfileLayout = () => {
     }
 
     try {
-      setIsLoading(true);
+      setIs_loading(true);
       const token = localStorage.getItem('token');
       if (!token) throw new Error('Please log in');
 
@@ -143,7 +149,51 @@ const ProfileLayout = () => {
       console.error('Profile upload failed:', err);
       toast.error(err.response?.data?.message || err.message || 'Failed to upload profile image');
     } finally {
-      setIsLoading(false);
+      setIs_loading(false);
+    }
+  };
+
+  const handleDeleteCover = async () => {
+    try {
+      setIs_loading(true);
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Please log in');
+
+      const userId = user._id || user.id;
+      const res = await API.delete(`/auth/users/${userId}/cover`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setUser(res.data);
+      localStorage.setItem('user', JSON.stringify(res.data));
+      toast.success('Cover image removed successfully');
+    } catch (err) {
+      console.error('Delete cover failed:', err);
+      toast.error(err.response?.data?.message || err.message || 'Failed to remove cover image');
+    } finally {
+      setIs_loading(false);
+    }
+  };
+
+  const handleDeleteProfile = async () => {
+    try {
+      setIs_loading(true);
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Please log in');
+
+      const userId = user._id || user.id;
+      const res = await API.delete(`/auth/users/${userId}/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setUser(res.data);
+      localStorage.setItem('user', JSON.stringify(res.data));
+      toast.success('Profile image removed successfully');
+    } catch (err) {
+      console.error('Delete profile failed:', err);
+      toast.error(err.response?.data?.message || err.message || 'Failed to remove profile image');
+    } finally {
+      setIs_loading(false);
     }
   };
 
@@ -152,26 +202,24 @@ const ProfileLayout = () => {
       toast.error('Name cannot be empty');
       return;
     }
-  
+
     try {
-      setIsLoading(true);
+      setIs_loading(true);
       const token = localStorage.getItem('token');
       if (!token) throw new Error('Please log in');
-  
+
       const userId = user._id || user.id;
       const payload = {
         name: editName.trim(),
-       
         headline: editHeadline.trim(),
       };
-  
-      // ✅ Merge header updates with full user object to avoid losing fields
+
       const mergedPayload = { ...user, ...payload };
-  
+
       const res = await API.put(`/auth/users/${userId}`, mergedPayload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-  
+
       setUser(res.data);
       localStorage.setItem('user', JSON.stringify(res.data));
       setIsEditingHeader(false);
@@ -180,7 +228,7 @@ const ProfileLayout = () => {
       console.error('Failed to update header:', err);
       toast.error(err.response?.data?.message || err.message || 'Failed to update profile');
     } finally {
-      setIsLoading(false);
+      setIs_loading(false);
     }
   };
 
@@ -276,14 +324,27 @@ const ProfileLayout = () => {
                   onChange={handleCoverUpload}
                   disabled={isLoading}
                 />
-                <button
-                  onClick={() => document.getElementById('coverUpload').click()}
-                  className="absolute right-4 top-4 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:opacity-50"
-                  disabled={isLoading}
-                  aria-label="Upload cover image"
-                >
-                  {isLoading ? 'Uploading...' : 'Add Cover Image'}
-                </button>
+                <div className="absolute right-4 top-4 flex gap-2">
+  <button
+    onClick={() => document.getElementById('coverUpload').click()}
+    className="p-2 rounded-full bg-white hover:bg-gray-100 text-gray-600 shadow disabled:opacity-50"
+    title="Upload Cover"
+    disabled={isLoading}
+  >
+    <Upload size={18} />
+  </button>
+
+  {user.coverImage && (
+    <button
+      onClick={handleDeleteCover}
+      className="p-2 rounded-full bg-white hover:bg-red-50 text-red-600 shadow disabled:opacity-50"
+      title="Remove Cover"
+      disabled={isLoading}
+    >
+      <Trash2 size={18} />
+    </button>
+  )}
+</div>
               </div>
 
               {/* Profile Details */}
@@ -304,14 +365,26 @@ const ProfileLayout = () => {
                         onChange={handleProfileUpload}
                         disabled={isLoading}
                       />
-                      <button
-                        onClick={() => document.getElementById('profileUpload').click()}
-                        className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white transition hover:bg-blue-700 disabled:opacity-50"
-                        disabled={isLoading}
-                        aria-label="Upload profile image"
-                      >
-                        +
-                      </button>
+                      <div className="absolute bottom-0 right-0 flex gap-1">
+                        <button
+                          onClick={() => document.getElementById('profileUpload').click()}
+                          className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white transition hover:bg-blue-700 disabled:opacity-50"
+                          disabled={isLoading}
+                          aria-label="Upload profile image"
+                        >
+                          +
+                        </button>
+                        {user.profileImage && (
+                          <button
+                            onClick={handleDeleteProfile}
+                            className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-red-600 text-white transition hover:bg-red-700 disabled:opacity-50"
+                            disabled={isLoading}
+                            aria-label="Remove profile image"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -337,7 +410,6 @@ const ProfileLayout = () => {
                           </div>
                         )}
                       </div>
-                     
                       <div className="relative">
                         <input
                           type="text"
@@ -382,7 +454,6 @@ const ProfileLayout = () => {
                           onClick={() => {
                             setIsEditingHeader(true);
                             setEditName(user.name || '');
-                            
                             setEditHeadline(user.headline || '');
                           }}
                           className="text-sm font-medium text-blue-600 transition hover:underline"
@@ -419,16 +490,14 @@ const ProfileLayout = () => {
                   </div>
 
                   <div className="mt-4 flex gap-6 text-sm">
-                    
                     <div className="text-center">
-  <p className="font-semibold text-gray-900">{counts.following}</p>
-  <p className="text-gray-500">Following</p>
-</div>
-<div className="text-center">
-  <p className="font-semibold text-gray-900">{counts.followers}</p>
-  <p className="text-gray-500">Followers</p>
-</div>
-
+                      <p className="font-semibold text-gray-900">{counts.following}</p>
+                      <p className="text-gray-500">Following</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="font-semibold text-gray-900">{counts.followers}</p>
+                      <p className="text-gray-500">Followers</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -436,6 +505,7 @@ const ProfileLayout = () => {
 
             {/* Dynamic Content Section */}
             <Outlet context={{ user, fetchUser }} />
+            
           </main>
         </div>
       </div>

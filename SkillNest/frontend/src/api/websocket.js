@@ -17,11 +17,11 @@ export const connectWebSocket = (userId, onMessageReceived) => {
     isConnected = true;
     console.log("✅ WebSocket connected for user:", userId);
 
-    // Safe subscribe after connection
+    // ✅ Subscribe to /queue/messages
     if (stompClient && stompClient.connected) {
-      stompClient.subscribe(`/user/${userId}/queue/notifications`, (message) => {
-        const notification = JSON.parse(message.body);
-        onMessageReceived(notification);
+      stompClient.subscribe(`/user/${userId}/queue/messages`, (message) => {
+        const msg = JSON.parse(message.body);
+        onMessageReceived(msg);
       });
     }
   }, (error) => {

@@ -1,10 +1,10 @@
 package com.skillnest.backend.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-
 import java.time.LocalDateTime;
 import java.util.List;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document("documents")
 public class UserDocument {
@@ -13,6 +13,7 @@ public class UserDocument {
     private String id;
 
     private String userId;
+    private String type; // "document" or "certificate"
     private String name;
     private String description;
     private String visibility;
@@ -20,6 +21,9 @@ public class UserDocument {
     private List<String> tags;
     private String filePath;
     private LocalDateTime uploadedAt;
+    // Certificate-specific fields
+    private String issuingOrganization;
+    private String credentialUrl;
 
     // Getters and Setters
 
@@ -37,6 +41,14 @@ public class UserDocument {
 
     public void setUserId(String userId) {
         this.userId = userId;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 
     public String getName() {
@@ -93,5 +105,21 @@ public class UserDocument {
 
     public void setUploadedAt(LocalDateTime uploadedAt) {
         this.uploadedAt = uploadedAt;
+    }
+
+    public String getIssuingOrganization() {
+        return issuingOrganization;
+    }
+
+    public void setIssuingOrganization(String issuingOrganization) {
+        this.issuingOrganization = issuingOrganization;
+    }
+
+    public String getCredentialUrl() {
+        return credentialUrl;
+    }
+
+    public void setCredentialUrl(String credentialUrl) {
+        this.credentialUrl = credentialUrl;
     }
 }

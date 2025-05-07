@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -112,7 +113,7 @@ public class AuthController {
 
             GoogleIdToken googleIdToken = verifier.verify(idToken);
             if (googleIdToken == null) {
-                return ResponseEntity.status(400).body("Invalid ID token");
+                throw new RuntimeException("Invalid ID token");
             }
 
             GoogleIdToken.Payload payload = googleIdToken.getPayload();
@@ -121,16 +122,24 @@ public class AuthController {
             String picture = (String) payload.get("picture");
 
             // Find or create user
-            User user = userRepo.findByEmail(email)
-                    .orElseGet(() -> {
-                        User newUser = new User();
-                        newUser.setEmail(email);
-                        newUser.setName(name);
-                        newUser.setProfileImage(picture);
-                        newUser.setLoginMethod("google");
-                        newUser.setCreatedAt(new Date());
-                        return userRepo.save(newUser);
-                    });
+            Optional<User> userOpt = userRepo.findByEmail(email);
+            User user;
+            if (userOpt.isPresent()) {
+                user = userOpt.get();
+                // Check if the user is registered for Google login
+                if (!"google".equals(user.getLoginMethod())) {
+                    throw new RuntimeException("User is registered with a different login method. Please use manual login.");
+                }
+            } else {
+                // Create new user for Google login
+                user = new User();
+                user.setEmail(email);
+                user.setName(name);
+                user.setProfileImage(picture);
+                user.setLoginMethod("google");
+                user.setCreatedAt(new Date());
+                user = userRepo.save(user);
+            }
 
             // Generate JWT token
             String token = jwtUtil.generateToken(user.getId());
@@ -148,10 +157,8 @@ public class AuthController {
                     .build();
         } catch (Exception e) {
             logger.error("Google OAuth callback error: {}", e.getMessage());
-            // Redirect to frontend with error message
             String errorRedirectUrl = UriComponentsBuilder
                     .fromUriString("http://localhost:5173/auth/google/callback")
-                    //.queryParam("error", java.net.URLEncoder.encode("Google login failed: " + e.getMessage(), "UTF-8"))
                     .build()
                     .toUriString();
 
@@ -197,18 +204,6 @@ public class AuthController {
         return ResponseEntity.ok(res);
     }
 
-    @PostMapping("/google")
-    public ResponseEntity<?> googleLogin(@RequestBody User googleUser) {
-        return ResponseEntity.ok(
-            userRepo.findByEmail(googleUser.getEmail())
-                    .orElseGet(() -> {
-                        googleUser.setLoginMethod("google");
-                        googleUser.setCreatedAt(new Date());
-                        return userRepo.save(googleUser);
-                    })
-        );
-    }
-
     @GetMapping("/users/{id}")
     public ResponseEntity<?> getUserById(@PathVariable String id) {
         return userRepo.findById(id)
@@ -231,6 +226,32 @@ public class AuthController {
         }
     }
 
+    @DeleteMapping("/users/{id}/cover")
+    public ResponseEntity<?> deleteCover(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        try {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(401).body("Missing or malformed token");
+            }
+
+            String userId = jwtUtil.validateToken(authHeader.replace("Bearer ", ""));
+            if (userId == null || !userId.equals(id)) {
+                return ResponseEntity.status(403).body("Invalid or unauthorized token");
+            }
+
+            Optional<User> userOpt = userRepo.findById(id);
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.status(404).body("User not found");
+            }
+
+            User user = userOpt.get();
+            user.setCoverImage(null);
+            return ResponseEntity.ok(userRepo.save(user));
+        } catch (Exception e) {
+            logger.error("Error deleting cover image: {}", e.getMessage());
+            return ResponseEntity.status(500).body("Error deleting cover image");
+        }
+    }
+
     @PostMapping("/users/{id}/profile")
     public ResponseEntity<?> uploadProfileImage(@PathVariable String id, @RequestParam("profileImage") MultipartFile file) {
         try {
@@ -243,6 +264,32 @@ public class AuthController {
             return ResponseEntity.ok(userRepo.save(user));
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Upload error: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/users/{id}/profile")
+    public ResponseEntity<?> deleteProfileImage(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        try {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(401).body("Missing or malformed token");
+            }
+
+            String userId = jwtUtil.validateToken(authHeader.replace("Bearer ", ""));
+            if (userId == null || !userId.equals(id)) {
+                return ResponseEntity.status(403).body("Invalid or unauthorized token");
+            }
+
+            Optional<User> userOpt = userRepo.findById(id);
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.status(404).body("User not found");
+            }
+
+            User user = userOpt.get();
+            user.setProfileImage(null);
+            return ResponseEntity.ok(userRepo.save(user));
+        } catch (Exception e) {
+            logger.error("Error deleting profile image: {}", e.getMessage());
+            return ResponseEntity.status(500).body("Error deleting profile image");
         }
     }
 
@@ -349,13 +396,13 @@ public class AuthController {
     }
 
     @GetMapping("/users/{userId}/counts")
-public ResponseEntity<?> getCounts(@PathVariable String userId) {
-    return ResponseEntity.ok(userService.getFollowCounts(userId));
-}
-@GetMapping("/users")
+    public ResponseEntity<?> getCounts(@PathVariable String userId) {
+        return ResponseEntity.ok(userService.getFollowCounts(userId));
+    }
+
+    @GetMapping("/users")
     public ResponseEntity<List<User>> getAllUsers() {
         List<User> users = userRepo.findAll();
         return ResponseEntity.ok(users);
     }
-
 }

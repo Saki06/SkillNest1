@@ -1,4 +1,3 @@
-// ✅ PostService.java — only handles post creation, deletion, and fetching
 package com.skillnest.backend.service;
 
 import java.io.File;
@@ -80,7 +79,7 @@ public class PostService {
         return postRepository.save(post);
     }
 
-    public Post updatePost(String postId, Post updatedPost, List<MultipartFile> files) {
+    public Post updatePost(String postId, Post updatedPost, List<MultipartFile> files, List<String> removedMedia) {
         // Find existing post
         Optional<Post> existingPostOpt = postRepository.findById(postId);
         if (!existingPostOpt.isPresent()) {
@@ -95,7 +94,25 @@ public class PostService {
         existingPost.setVisibility(updatedPost.getVisibility());
         existingPost.setAddToPortfolio(updatedPost.isAddToPortfolio());
 
-        List<String> mediaUrls = existingPost.getMediaUrls();
+        // Handle media URLs
+        List<String> mediaUrls = existingPost.getMediaUrls() != null ? new ArrayList<>(existingPost.getMediaUrls()) : new ArrayList<>();
+
+        // Remove specified media URLs and delete files
+        if (removedMedia != null && !removedMedia.isEmpty()) {
+            for (String mediaUrl : removedMedia) {
+                mediaUrls.remove(mediaUrl);
+                // Delete the file from the server
+                String filename = mediaUrl.substring(mediaUrl.lastIndexOf('/') + 1);
+                File fileToDelete = new File(uploadDir, filename);
+                if (fileToDelete.exists()) {
+                    if (!fileToDelete.delete()) {
+                        throw new RuntimeException("Failed to delete file: " + filename);
+                    }
+                }
+            }
+        }
+
+        // Add new files
         if (files != null && !files.isEmpty()) {
             for (MultipartFile file : files) {
                 String contentType = file.getContentType();
@@ -119,6 +136,7 @@ public class PostService {
                 }
             }
         }
+
         existingPost.setMediaUrls(mediaUrls);
 
         // Save updated post

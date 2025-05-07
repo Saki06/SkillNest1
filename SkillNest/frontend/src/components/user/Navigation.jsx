@@ -6,13 +6,15 @@ import API from '../../api/axios';
 import { toast } from 'react-toastify';
 import Chat from '../chat/Chat';
 import Notification from '../Notification';
+import { connectWebSocket, disconnectWebSocket } from '../../api/websocket';
 
 const Navigation = () => {
   const [initials, setInitials] = useState('SN');
   const [user, setUser] = useState(null);
   const [profileImage, setProfileImage] = useState('');
   const [showChat, setShowChat] = useState(false);
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [unreadSenders, setUnreadSenders] = useState(new Set());
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -21,7 +23,6 @@ const Navigation = () => {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        // Retrieve user from localStorage
         const savedUser = JSON.parse(localStorage.getItem('user') || 'null');
         if (!savedUser) {
           toast.warn('No user found in local storage. Please log in.');
@@ -29,49 +30,34 @@ const Navigation = () => {
           return;
         }
 
-        // Set initials and profile image
         if (savedUser.name) {
           const names = savedUser.name.trim().split(' ');
           const firstInitial = names[0]?.[0] || '';
           const lastInitial = names.length > 1 ? names[names.length - 1]?.[0] : '';
           setInitials((firstInitial + lastInitial).toUpperCase());
         }
+
         setProfileImage(savedUser.profileImage || '');
         setUser(savedUser);
 
-        // Validate user ID
         const userId = savedUser._id || savedUser.id;
-        if (!userId) {
-          toast.error('Invalid user ID');
-          return;
-        }
-
-        // Get token and set headers
         const token = localStorage.getItem('token');
-        if (!token) {
-          toast.warn('No authentication token found. Please log in.');
-          navigate('/login');
-          return;
-        }
-
         const config = { headers: { Authorization: `Bearer ${token}` } };
 
-        // Fetch user data
         const response = await API.get(`/auth/users/${userId}`, config);
         setUser(response.data);
         setProfileImage(response.data.profileImage || '');
 
-        // Fetch unread messages count
+        // Optional: fetch unread messages and track unique sender IDs
         const messagesResponse = await API.get(`/messages/${userId}`, config);
-        const unread = messagesResponse.data.filter(msg => !msg.isRead).length;
-        setUnreadMessageCount(unread);
+        const unreadFrom = new Set(
+          messagesResponse.data
+            .filter(msg => !msg.isRead && msg.receiverId === userId)
+            .map(msg => msg.senderId)
+        );
+        setUnreadSenders(unreadFrom);
       } catch (err) {
-        console.error('Error fetching user or messages:', {
-          message: err.message,
-          status: err.response?.status,
-          data: err.response?.data,
-        });
-        
+        console.error('Error fetching user or messages:', err);
         if (err.message.includes('Network Error')) {
           toast.error('Network error: Please check your connection and try again.');
         } else if (err.response?.status === 401) {
@@ -88,36 +74,64 @@ const Navigation = () => {
     fetchUser();
   }, [navigate]);
 
+  useEffect(() => {
+    if (!user?.id && !user?._id) return;
+    const userId = user._id || user.id;
+
+    const stomp = connectWebSocket(userId, (msg) => {
+      if (msg.receiverId === userId && msg.senderId !== userId) {
+        setUnreadSenders((prev) => {
+          const updated = new Set(prev);
+          updated.add(msg.senderId);
+          return updated;
+        });
+
+        toast.info(`💬 New message from ${msg.senderName || 'Someone'}`, {
+          onClick: () => navigate('/messages'),
+          autoClose: 5000,
+          pauseOnHover: true,
+          closeOnClick: true,
+        });
+
+        const sound = new Audio('/sounds/message.mp3');
+        sound.play().catch(() => {});
+
+        if (window.navigator.vibrate) {
+          window.navigator.vibrate(200);
+        }
+      }
+    });
+
+    return () => disconnectWebSocket();
+  }, [user, navigate]);
+
   const handleLogout = () => {
-    try {
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
-      setUser(null);
-      setInitials('SN');
-      setProfileImage('');
-      toast.success('Logged out successfully');
-      navigate('/login');
-    } catch (err) {
-      console.error('Error during logout:', err);
-      toast.error('Failed to log out');
-    }
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    setUser(null);
+    setInitials('SN');
+    setProfileImage('');
+    toast.success('Logged out successfully');
+    navigate('/login');
   };
 
   const getProfileImage = () => {
-    if (profileImage) {
-      return <img src={profileImage} alt="Profile" className="w-9 h-9 rounded-full object-cover border border-gray-300" />;
-    }
-    return (
+    return profileImage ? (
+      <img
+        src={profileImage}
+        alt="Profile"
+        className="w-9 h-9 rounded-full object-cover border border-gray-300"
+      />
+    ) : (
       <div
-  className="w-11 h-11 rounded-full bg-gray-200 flex items-center justify-center border-2"
-  style={{ borderColor: '#3b82f6' }}
->
-  <span className="text-sm font-medium text-black">{initials}</span>
-</div>
-
-
+        className="w-11 h-11 rounded-full bg-gray-200 flex items-center justify-center border-2"
+        style={{ borderColor: '#3b82f6' }}
+      >
+        <span className="text-sm font-medium text-black">{initials}</span>
+      </div>
     );
   };
+
   return (
     <>
       <nav className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -165,14 +179,16 @@ const Navigation = () => {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowChat(true)}
+            onClick={() => {
+              setShowChat(true);
+              setUnreadSenders(new Set()); // Clear unread senders
+            }}
             className="p-2 rounded-full hover:bg-gray-100 text-gray-600 hover:text-blue-600 relative"
           >
             <Mail size={20} />
-            {unreadMessageCount > 0 && (
-              <span className="absolute top-1 right-1 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+            {unreadSenders.size > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow">
+                {unreadSenders.size > 99 ? '99+' : unreadSenders.size}
               </span>
             )}
           </button>
@@ -192,9 +208,7 @@ const Navigation = () => {
           </button>
 
           <div className="relative ml-2">
-            <Link to="/profile">
-            {getProfileImage()}
-            </Link>
+            <Link to="/profile">{getProfileImage()}</Link>
             <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
