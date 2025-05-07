@@ -27,7 +27,7 @@ const Footer = () => {
         </a>
       </div>
       <div>
-        <p>CourseNetworking, LLC</p>
+        <p>SkillNest, LLC</p>
         <p>© 2011-2025</p>
         <p className="text-xs mt-1">Latest version V6 Apr 10, 2025</p>
       </div>
