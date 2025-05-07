@@ -140,6 +140,7 @@ const Post = ({
 
       await API.delete(`/auth/posts/${post.id}`);
       toast.success("Post deleted successfully");
+      onPostDeleted?.(post.id);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to delete post");
     } finally {
@@ -201,7 +202,7 @@ const Post = ({
   };
 
   const renderMedia = (url, idx, options = {}) => {
-    const { isGrid = false, isPrimary = false } = options;
+    const { isGrid = false } = options;
     if (!url) return null;
     const ext = getFileExtension(url);
 
@@ -222,8 +223,8 @@ const Post = ({
     return (
       <motion.div
         key={fullUrl}
-        className={`w-full rounded-lg overflow-hidden bg-white dark:bg-gray-800 ${
-          isGrid ? "h-full" : ""
+        className={`rounded-lg overflow-hidden bg-white dark:bg-gray-800 ${
+          isGrid ? "h-full" : "w-full"
         }`}
         variants={cardVariants}
         initial="rest"
@@ -266,22 +267,25 @@ const Post = ({
           <img
             src={fullUrl}
             alt={`Post media ${idx + 1}`}
-            className="w-full h-auto object-contain rounded-lg"
+            className="w-full h-auto object-cover rounded-lg"
             style={{
-              aspectRatio: "16 / 9",
-              maxHeight: isPrimary ? "500px" : isGrid ? "200px" : "400px",
+              aspectRatio: "4 / 3",
+              maxHeight: isGrid ? "250px" : "500px",
             }}
+            loading="lazy"
+            aria-label={`Post image ${idx + 1}`}
             onError={(e) => (e.target.src = "/assets/fallback-image.png")}
           />
         ) : ["mp4", "webm", "mov"].includes(ext) ? (
           <video
             src={fullUrl}
             controls
-            className="w-full h-auto object-contain rounded-lg"
+            className="w-full h-auto object-cover rounded-lg"
             style={{
-              aspectRatio: "16 / 9",
-              maxHeight: isPrimary ? "500px" : isGrid ? "200px" : "400px",
+              aspectRatio: "4 / 3",
+              maxHeight: isGrid ? "250px" : "500px",
             }}
+            aria-label={`Post video ${idx + 1}`}
             onError={() => console.error(`Failed to load video from ${fullUrl}`)}
           />
         ) : (
@@ -427,26 +431,22 @@ const Post = ({
         {mediaUrls.length > 0 && (
           <div className="mt-4 space-y-4">
             {visualMediaUrls.length > 0 && (
-              <>
-                {/* First image/video (full-width) */}
-                {renderMedia(visualMediaUrls[0], 0, { isPrimary: true })}
-                {/* Additional images/videos (grid) */}
-                {visualMediaUrls.length > 1 && (
-                  <div
-                    className={`grid gap-4 ${
-                      visualMediaUrls.length === 2
-                        ? "grid-cols-1 md:grid-cols-2"
-                        : "grid-cols-1 md:grid-cols-2"
-                    }`}
-                  >
-                    {visualMediaUrls.slice(1).map((url, idx) =>
-                      renderMedia(url, idx + 1, { isGrid: true })
-                    )}
-                  </div>
+              <div
+                className={`grid gap-2 ${
+                  visualMediaUrls.length === 1
+                    ? "grid-cols-1"
+                    : visualMediaUrls.length === 2
+                    ? "grid-cols-2"
+                    : "grid-cols-2 md:grid-cols-3"
+                }`}
+              >
+                {visualMediaUrls.map((url, idx) =>
+                  renderMedia(url, idx, {
+                    isGrid: visualMediaUrls.length > 1,
+                  })
                 )}
-              </>
+              </div>
             )}
-            {/* PDFs */}
             {pdfUrls.map((url, idx) => renderMedia(url, idx))}
           </div>
         )}
