@@ -28,32 +28,38 @@ public class MessageService {
         );
     }
 
+    public Message getMessageById(String messageId) {
+        return messageRepository.findById(messageId).orElse(null);
+    }
+
     public Message markAsReadAndReturn(String messageId) {
-        Message message = messageRepository.findById(messageId).orElseThrow();
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found with ID: " + messageId));
         message.setRead(true);
         return messageRepository.save(message);
     }
 
     public void deleteMessageById(String messageId) {
+        if (!messageRepository.existsById(messageId)) {
+            throw new RuntimeException("Message not found with ID: " + messageId);
+        }
         messageRepository.deleteById(messageId);
     }
 
     public Message editMessage(String messageId, String newContent) {
-        Message message = messageRepository.findById(messageId).orElseThrow();
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found with ID: " + messageId));
         message.setContent(newContent);
         message.setEdited(true);
         return messageRepository.save(message);
     }
 
     public long countNewMessagesSinceLastSent(String userId) {
-        // Find the timestamp of the last message sent by the user
         List<Message> sentMessages = messageRepository.findBySenderId(userId);
         if (sentMessages.isEmpty()) {
-            // If no messages sent, count all received messages
             return messageRepository.countByRecipientId(userId);
         }
 
-        // Get the timestamp of the most recent sent message
         Message lastSentMessage = sentMessages.stream()
             .max((m1, m2) -> m1.getTimestamp().compareTo(m2.getTimestamp()))
             .orElse(null);
@@ -62,7 +68,6 @@ public class MessageService {
             return messageRepository.countByRecipientId(userId);
         }
 
-        // Count messages received after the last sent message
         return messageRepository.countByRecipientIdAndTimestampAfter(
             userId, 
             lastSentMessage.getTimestamp()

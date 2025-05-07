@@ -33,7 +33,6 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
 
-    // Injects upload directory from application.properties
     @Autowired
     public UserService(@Value("${file.upload-dir}") String uploadDir) throws IOException {
         this.fileStorageLocation = Paths.get(uploadDir).toAbsolutePath().normalize();
@@ -42,99 +41,144 @@ public class UserService {
         }
     }
 
-    // Fetch user by ID
     public Optional<User> findById(String id) {
         return userRepository.findById(id);
     }
 
-    // Update user profile fields
     public User updateUser(String id, User updatedUser) {
         return userRepository.findById(id).map(existing -> {
-            existing.setName(updatedUser.getName());
-            existing.setHeadline(updatedUser.getHeadline());
-            existing.setBio(updatedUser.getBio());
-            existing.setTagline(updatedUser.getTagline());
-            existing.setGender(updatedUser.getGender());
-            existing.setCountry(updatedUser.getCountry());
-            existing.setState(updatedUser.getState());
-            existing.setCity(updatedUser.getCity());
-            existing.setRole(updatedUser.getRole());
-            existing.setInstitution(updatedUser.getInstitution());
-            existing.setLanguage(updatedUser.getLanguage());
-            existing.setInternship(updatedUser.getInternship());
-            existing.setFieldOfStudy(updatedUser.getFieldOfStudy());
+            if (updatedUser.getName() != null) {
+                existing.setName(updatedUser.getName());
+            }
+            if (updatedUser.getHeadline() != null) {
+                existing.setHeadline(updatedUser.getHeadline());
+            }
+            if (updatedUser.getBio() != null) {
+                existing.setBio(updatedUser.getBio());
+            }
+            if (updatedUser.getTagline() != null) {
+                existing.setTagline(updatedUser.getTagline());
+            }
+            if (updatedUser.getGender() != null) {
+                existing.setGender(updatedUser.getGender());
+            }
+            if (updatedUser.getCountry() != null) {
+                existing.setCountry(updatedUser.getCountry());
+            }
+            if (updatedUser.getState() != null) {
+                existing.setState(updatedUser.getState());
+            }
+            if (updatedUser.getCity() != null) {
+                existing.setCity(updatedUser.getCity());
+            }
+            if (updatedUser.getRole() != null) {
+                existing.setRole(updatedUser.getRole());
+            }
+            if (updatedUser.getInstitution() != null) {
+                existing.setInstitution(updatedUser.getInstitution());
+            }
+            if (updatedUser.getLanguage() != null) {
+                existing.setLanguage(updatedUser.getLanguage());
+            }
+            if (updatedUser.getInternship() != null) {
+                existing.setInternship(updatedUser.getInternship());
+            }
+            if (updatedUser.getFieldOfStudy() != null) {
+                existing.setFieldOfStudy(updatedUser.getFieldOfStudy());
+            }
             return userRepository.save(existing);
         }).orElseThrow(() -> new RuntimeException("User not found"));
     }
 
-    // Handle resume file upload
     public User uploadResume(String id, MultipartFile file) throws IOException {
         return userRepository.findById(id).map(user -> {
             try {
                 String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
                 Path targetLocation = fileStorageLocation.resolve(filename);
                 Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-                user.setResume("/uploads/" + filename); // Relative path to serve via Spring
+                user.setResume("/uploads/" + filename);
                 return userRepository.save(user);
             } catch (IOException e) {
                 throw new RuntimeException("Failed to upload resume", e);
             }
         }).orElseThrow(() -> new RuntimeException("User not found"));
     }
+
+    public User deleteResume(String id) throws IOException {
+        return userRepository.findById(id).map(user -> {
+            if (user.getResume() == null) {
+                return user; // No resume to delete
+            }
+            try {
+                String resumePath = user.getResume().replace("/uploads/", "");
+                Path filePath = fileStorageLocation.resolve(resumePath);
+                if (Files.exists(filePath)) {
+                    Files.delete(filePath);
+                    logger.info("Deleted resume file: {}", filePath);
+                }
+                user.setResume(null);
+                return userRepository.save(user);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to delete resume file", e);
+            }
+        }).orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
     public User updateSkills(String userId, List<String> newSkills) {
-    return userRepository.findById(userId).map(user -> {
-        user.setSkills(newSkills);
-        return userRepository.save(user);
-    }).orElseThrow(() -> new RuntimeException("User not found"));
-}
-public void follow(String followerId, String followedId) {
-    if (followerId == null || followedId == null) {
-        throw new IllegalArgumentException("Invalid user IDs");
-    }
-    if (followerId.equals(followedId)) {
-        throw new IllegalArgumentException("Cannot follow yourself");
+        return userRepository.findById(userId).map(user -> {
+            user.setSkills(newSkills);
+            return userRepository.save(user);
+        }).orElseThrow(() -> new RuntimeException("User not found"));
     }
 
-    User follower = userRepository.findById(followerId)
-            .orElseThrow(() -> new RuntimeException("Follower not found"));
-    User followed = userRepository.findById(followedId)
-            .orElseThrow(() -> new RuntimeException("User to follow not found"));
+    public void follow(String followerId, String followedId) {
+        if (followerId == null || followedId == null) {
+            throw new IllegalArgumentException("Invalid user IDs");
+        }
+        if (followerId.equals(followedId)) {
+            throw new IllegalArgumentException("Cannot follow yourself");
+        }
 
-    if (follower.getFollowing().contains(followedId)) {
-        logger.info("User {} already following {}", followerId, followedId);
-        return; // Silently ignore
+        User follower = userRepository.findById(followerId)
+                .orElseThrow(() -> new RuntimeException("Follower not found"));
+        User followed = userRepository.findById(followedId)
+                .orElseThrow(() -> new RuntimeException("User to follow not found"));
+
+        if (follower.getFollowing().contains(followedId)) {
+            logger.info("User {} already following {}", followerId, followedId);
+            return;
+        }
+
+        follower.getFollowing().add(followedId);
+        followed.getFollowers().add(followerId);
+
+        userRepository.save(follower);
+        userRepository.save(followed);
+        logger.info("User {} followed {}", followerId, followedId);
     }
 
-    follower.getFollowing().add(followedId);
-    followed.getFollowers().add(followerId);
+    public void unfollow(String followerId, String followedId) {
+        if (followerId == null || followedId == null) {
+            throw new IllegalArgumentException("Invalid user IDs");
+        }
 
-    userRepository.save(follower);
-    userRepository.save(followed);
-    logger.info("User {} followed {}", followerId, followedId);
-}
+        User follower = userRepository.findById(followerId)
+                .orElseThrow(() -> new RuntimeException("Follower not found"));
+        User followed = userRepository.findById(followedId)
+                .orElseThrow(() -> new RuntimeException("User to unfollow not found"));
 
-public void unfollow(String followerId, String followedId) {
-    if (followerId == null || followedId == null) {
-        throw new IllegalArgumentException("Invalid user IDs");
+        if (!follower.getFollowing().contains(followedId)) {
+            logger.info("User {} not following {}", followerId, followedId);
+            return;
+        }
+
+        follower.getFollowing().remove(followedId);
+        followed.getFollowers().remove(followerId);
+
+        userRepository.save(follower);
+        userRepository.save(followed);
+        logger.info("User {} unfollowed {}", followerId, followedId);
     }
-
-    User follower = userRepository.findById(followerId)
-            .orElseThrow(() -> new RuntimeException("Follower not found"));
-    User followed = userRepository.findById(followedId)
-            .orElseThrow(() -> new RuntimeException("User to unfollow not found"));
-
-    if (!follower.getFollowing().contains(followedId)) {
-        logger.info("User {} not following {}", followerId, followedId);
-        return; // Silently ignore
-    }
-
-    follower.getFollowing().remove(followedId);
-    followed.getFollowers().remove(followerId);
-
-    userRepository.save(follower);
-    userRepository.save(followed);
-    logger.info("User {} unfollowed {}", followerId, followedId);
-}
 
     public Set<String> getFollowingIds(String userId) {
         return userRepository.findById(userId)
@@ -149,13 +193,11 @@ public void unfollow(String followerId, String followedId) {
     }
 
     public Map<String, Integer> getFollowCounts(String userId) {
-    User user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("User not found"));
-    Map<String, Integer> counts = new HashMap<>();
-    counts.put("followersCount", user.getFollowers().size());
-    counts.put("followingCount", user.getFollowing().size());
-    return counts;
-}
-
-
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        Map<String, Integer> counts = new HashMap<>();
+        counts.put("followersCount", user.getFollowers().size());
+        counts.put("followingCount", user.getFollowing().size());
+        return counts;
+    }
 }

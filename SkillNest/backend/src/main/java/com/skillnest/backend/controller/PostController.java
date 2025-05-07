@@ -1,4 +1,3 @@
-// ✅ PostController.java — updated to fix Post constructor error using setters
 package com.skillnest.backend.controller;
 
 import java.util.HashMap;
@@ -14,17 +13,17 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.http.HttpStatus;
 import com.skillnest.backend.model.Post;
 import com.skillnest.backend.repository.PostRepository;
 import com.skillnest.backend.repository.UserRepository;
 import com.skillnest.backend.service.PostService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/auth/posts")
@@ -112,7 +111,8 @@ public class PostController {
             return ResponseEntity.internalServerError().body("Error deleting post");
         }
     }
-    @PutMapping("/{postId}")
+
+    @PutMapping(value = "/{postId}", consumes = {"multipart/form-data"})
     public ResponseEntity<?> updatePost(
         @PathVariable String postId,
         @RequestParam("title") String title,
@@ -120,7 +120,8 @@ public class PostController {
         @RequestParam("visibility") String visibility,
         @RequestParam("addToPortfolio") boolean addToPortfolio,
         @RequestParam("userId") String userId,
-        @RequestParam(value = "files", required = false) List<MultipartFile> files
+        @RequestParam(value = "files", required = false) List<MultipartFile> files,
+        @RequestParam(value = "removedMedia", required = false) String removedMediaJson
     ) {
         try {
             Post updatedPost = new Post();
@@ -131,7 +132,13 @@ public class PostController {
             updatedPost.setVisibility(visibility);
             updatedPost.setAddToPortfolio(addToPortfolio);
 
-            Post savedPost = postService.updatePost(postId, updatedPost, files);
+            List<String> removedMedia = null;
+            if (removedMediaJson != null && !removedMediaJson.isEmpty()) {
+                ObjectMapper mapper = new ObjectMapper();
+                removedMedia = mapper.readValue(removedMediaJson, mapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            }
+
+            Post savedPost = postService.updatePost(postId, updatedPost, files, removedMedia);
             return ResponseEntity.ok(savedPost);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

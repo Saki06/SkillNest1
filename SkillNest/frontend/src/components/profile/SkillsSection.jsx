@@ -108,8 +108,8 @@ const SkillsPage = () => {
 
   return (
     <div className="bg-white p-6 shadow rounded-xl max-w-4xl mx-auto">
-      <h3 className="text-2xl font-semibold text-gray-800 mb-4">Skills</h3>
-      
+     
+      <h1 className="text-3xl font-bold mb-8">Skills</h1>
       <div className="flex gap-4 mb-6">
         <div className="text-lg font-semibold">{skills.length} {skills.length === 1 ? 'skill' : 'skills'}</div>
         <div className="text-lg font-semibold text-gray-500">0 skills with evidence 📄</div>

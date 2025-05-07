@@ -1,19 +1,22 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { MoreVertical, Edit2, Link2, Trash2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import API from '../../api/axios';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { MoreVertical, Eye, Edit2, Link2, Trash2 } from 'lucide-react';
 
 const DocumentsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [file, setFile] = useState(null);
+  const [docType, setDocType] = useState('document');
   const [docName, setDocName] = useState('');
   const [description, setDescription] = useState('');
   const [skillTags, setSkillTags] = useState([]);
   const [newTag, setNewTag] = useState('');
   const [visibility, setVisibility] = useState('private');
   const [folder, setFolder] = useState('');
+  const [issuingOrganization, setIssuingOrganization] = useState('');
+  const [credentialUrl, setCredentialUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [editingDocId, setEditingDocId] = useState(null);
@@ -74,8 +77,8 @@ const DocumentsPage = () => {
     const loadImages = async () => {
       const urls = {};
       for (const doc of documents) {
-        if (doc.fileUrl?.match(/\.(jpeg|jpg|png)$/i)) {
-          const imageUrl = await fetchImage(doc.fileUrl);
+        if (doc.filePath?.match(/\.(jpeg|jpg|png|pdf)$/i)) {
+          const imageUrl = await fetchImage(doc.filePath);
           if (imageUrl && isMounted) {
             urls[doc.id] = imageUrl;
           }
@@ -138,46 +141,35 @@ const DocumentsPage = () => {
 
   const handleEdit = (doc) => {
     console.log('Editing document:', doc);
+    setDocType(doc.type || 'document');
     setDocName(doc.name || '');
     setDescription(doc.description || '');
     setVisibility(doc.visibility || 'private');
     setFolder(doc.folder || '');
     setSkillTags(doc.tags || []);
+    setIssuingOrganization(doc.issuingOrganization || '');
+    setCredentialUrl(doc.credentialUrl || '');
     setEditingDocId(doc.id);
     setFile(null);
     setShowModal(true);
   };
 
   const handleDelete = async (docId) => {
-    if (!window.confirm('Are you sure you want to delete this document?')) return;
+    if (!window.confirm('Are you sure you want to delete this item?')) return;
 
     try {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No authentication token found');
-      console.log('Deleting document:', docId);
+      console.log('Deleting item:', docId);
       const res = await API.delete(`/auth/users/${userId}/documents/${docId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log('Delete response:', res.data);
-      toast.success('Document deleted successfully');
+      toast.success('Item deleted successfully');
       fetchDocuments(userId);
     } catch (err) {
-      toast.error(`Failed to delete document: ${err.response?.data?.error || err.message}`);
+      toast.error(`Failed to delete item: ${err.response?.data?.error || err.message}`);
       console.error('Delete error:', err);
-    }
-  };
-
-  const handleView = async (fileUrl) => {
-    console.log('Viewing document:', fileUrl);
-    if (!fileUrl) {
-      toast.error('No file URL available');
-      return;
-    }
-    try {
-      window.open(`http://localhost:8000${fileUrl}`, '_blank');
-    } catch (err) {
-      toast.error(`Failed to view document: ${err.message}`);
-      console.error('View error:', err);
     }
   };
 
@@ -197,6 +189,11 @@ const DocumentsPage = () => {
       return;
     }
 
+    if (docType === 'certificate' && !issuingOrganization.trim()) {
+      toast.error('Issuing organization is required for certificates');
+      return;
+    }
+
     const token = localStorage.getItem('token');
     if (!token) {
       toast.error('Please log in to continue');
@@ -210,43 +207,30 @@ const DocumentsPage = () => {
         : `/auth/users/${userId}/documents`;
       const method = editingDocId ? 'put' : 'post';
 
-      if (editingDocId && !file) {
-        // Update without file
-        const params = new URLSearchParams({
-          name: docName,
-          description,
-          visibility,
-          folder: folder || '',
-          tags: skillTags.join(','),
-        });
-        console.log('Updating document:', { url, method, params });
-        await API.put(url, params, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        });
-      } else {
-        // Create or update with file
-        const formData = new FormData();
-        if (file) {
-          formData.append('file', file);
-        }
-        formData.append('name', docName);
-        formData.append('description', description);
-        formData.append('visibility', visibility);
-        if (folder) formData.append('folder', folder);
-        skillTags.forEach((tag) => formData.append('tags', tag));
-        console.log('Submitting document:', { url, method, formData });
-        await API[method](url, formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        });
+      const formData = new FormData();
+      if (file) {
+        formData.append('file', file);
+      }
+      formData.append('type', docType);
+      formData.append('name', docName);
+      formData.append('description', description);
+      formData.append('visibility', visibility);
+      if (folder) formData.append('folder', folder);
+      skillTags.forEach((tag) => formData.append('tags', tag));
+      if (docType === 'certificate') {
+        formData.append('issuingOrganization', issuingOrganization);
+        if (credentialUrl) formData.append('credentialUrl', credentialUrl);
       }
 
-      toast.success(editingDocId ? 'Document updated successfully' : 'Document uploaded successfully');
+      console.log('Submitting item:', { url, method, formData });
+      await API[method](url, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      toast.success(editingDocId ? 'Item updated successfully' : 'Item uploaded successfully');
       resetForm();
       fetchDocuments(userId);
     } catch (err) {
@@ -265,12 +249,15 @@ const DocumentsPage = () => {
 
   const resetForm = () => {
     setFile(null);
+    setDocType('document');
     setDocName('');
     setDescription('');
     setSkillTags([]);
     setNewTag('');
     setVisibility('private');
     setFolder('');
+    setIssuingOrganization('');
+    setCredentialUrl('');
     setEditingDocId(null);
     setShowModal(false);
     if (fileInputRef.current) {
@@ -294,20 +281,14 @@ const DocumentsPage = () => {
     const date = new Date(dateString);
     return isNaN(date.getTime())
       ? 'Unknown Date'
-      : date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      : date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
   };
 
   return (
     <div className="bg-white p-6 shadow rounded-xl max-w-4xl mx-auto">
       <div className="flex justify-between items-start mb-4">
         <div>
-          <h3 className="text-2xl font-bold inline mr-2">Documents</h3>
-          <button
-            className="text-blue-600 hover:underline text-sm"
-            onClick={() => setShowReflectionModal(true)}
-          >
-            Add Reflection
-          </button>
+          <h3 className="text-2xl font-bold inline mr-2">Documents & Certificates</h3>
         </div>
         <Link to="/profile" className="text-blue-600 hover:underline">
           ← Back to Profile
@@ -320,16 +301,18 @@ const DocumentsPage = () => {
             key={doc.id}
             className="border rounded-lg p-4 hover:bg-gray-50 relative group flex gap-4 items-start"
           >
-            {doc.fileUrl?.match(/\.(jpeg|jpg|png)$/i) && imageUrls[doc.id] ? (
-              <img
-                src={imageUrls[doc.id]}
-                alt={doc.name}
-                className="w-20 h-20 object-cover rounded border"
-                onError={(e) => (e.target.src = '/placeholder.png')}
-              />
+            {doc.filePath?.match(/\.(jpeg|jpg|png|pdf)$/i) && imageUrls[doc.id] ? (
+              <a href={`http://localhost:8000${doc.filePath}`} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={imageUrls[doc.id]}
+                  alt={doc.name}
+                  className="w-20 h-20 object-cover rounded border cursor-pointer"
+                  onError={(e) => (e.target.src = '/placeholder.png')}
+                />
+              </a>
             ) : (
               <div className="w-20 h-20 flex items-center justify-center bg-gray-200 text-gray-600 text-3xl rounded">
-                📄
+                {doc.type === 'certificate' ? '🎓' : '📄'}
               </div>
             )}
 
@@ -344,7 +327,25 @@ const DocumentsPage = () => {
                   </span>
                 )}
               </div>
-              <p className="text-gray-600 text-sm mt-1 truncate">{doc.description || 'No description provided'}</p>
+              {doc.type === 'certificate' ? (
+                <>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Issued by {doc.issuingOrganization}
+                  </p>
+                  {doc.credentialUrl && (
+                    <a
+                      href={doc.credentialUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 text-xs hover:underline"
+                    >
+                      View Credential
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="text-gray-600 text-sm mt-1 truncate">{doc.description || 'No description provided'}</p>
+              )}
               <p className="text-gray-500 text-xs mt-1">Uploaded on {formatDate(doc.uploadedAt)}</p>
 
               {doc.tags?.length > 0 && (
@@ -371,26 +372,21 @@ const DocumentsPage = () => {
                     className="w-40 bg-white border rounded shadow-lg p-1 z-50"
                   >
                     <DropdownMenu.Item
-                      onSelect={() => handleView(doc.fileUrl)}
-                      className="flex items-center px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      <span>View</span>
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
                       onSelect={() => handleEdit(doc)}
                       className="flex items-center px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
                     >
                       <Edit2 className="mr-2 h-4 w-4" />
                       <span>Edit</span>
                     </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      onSelect={() => copyToClipboard(doc.fileUrl)}
-                      className="flex items-center px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
-                    >
-                      <Link2 className="mr-2 h-4 w-4" />
-                      <span>Copy Link</span>
-                    </DropdownMenu.Item>
+                    {doc.filePath && (
+                      <DropdownMenu.Item
+                        onSelect={() => copyToClipboard(doc.filePath)}
+                        className="flex items-center px-2 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+                      >
+                        <Link2 className="mr-2 h-4 w-4" />
+                        <span>Copy Link</span>
+                      </DropdownMenu.Item>
+                    )}
                     <DropdownMenu.Item
                       onSelect={() => handleDelete(doc.id)}
                       className="flex items-center px-2 py-1.5 text-sm text-red-600 hover:bg-gray-100 cursor-pointer"
@@ -410,9 +406,9 @@ const DocumentsPage = () => {
         className="border-2 border-dashed border-blue-400 p-8 rounded-lg cursor-pointer text-center hover:bg-blue-50"
         onClick={() => setShowModal(true)}
       >
-        <div className="text-3xl mb-2">📄</div>
-        <p className="text-blue-600 font-medium">Add a Document or Folder</p>
-        <p className="text-gray-500 text-sm">Supports PDF, Word, JPG, and PNG documents</p>
+        <div className="text-3xl mb-2">📄🎓</div>
+        <p className="text-blue-600 font-medium">Add a Document or Certificate</p>
+        <p className="text-gray-500 text-sm">Supports PDF, Word, JPG, and PNG for documents; optional for certificates</p>
       </div>
 
       {showReflectionModal && (
@@ -469,7 +465,7 @@ const DocumentsPage = () => {
           <div className="bg-white rounded-lg p-6 shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h4 id="document-modal-title" className="text-xl font-semibold">
-                {editingDocId ? 'Edit Document' : 'Add Document'}
+                {editingDocId ? `Edit ${docType === 'certificate' ? 'Certificate' : 'Document'}` : 'Add Document or Certificate'}
               </h4>
               <button
                 className="text-gray-500 hover:text-gray-700 text-2xl"
@@ -484,7 +480,23 @@ const DocumentsPage = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Document File {!editingDocId && '*'}
+                  Type *
+                </label>
+                <select
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value)}
+                  disabled={isLoading}
+                  aria-required="true"
+                >
+                  <option value="document">Document</option>
+                  <option value="certificate">Certificate</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {docType === 'certificate' ? 'Certificate File (optional)' : 'Document File *'}
                 </label>
                 <input
                   type="file"
@@ -496,18 +508,18 @@ const DocumentsPage = () => {
                 />
                 {editingDocId && !file && (
                   <p className="text-sm text-gray-600 mt-1">
-                    Current file: {documents.find((d) => d.id === editingDocId)?.name || 'Unknown'}
+                    Current file: {documents.find((d) => d.id === editingDocId)?.name || 'None'}
                   </p>
                 )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Document Name *
+                  {docType === 'certificate' ? 'Certificate Name *' : 'Document Name *'}
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. AI/ML Engineer - Stage 1"
+                  placeholder={docType === 'certificate' ? 'e.g. AWS Certified Solutions Architect' : 'e.g. AI/ML Engineer - Stage 1'}
                   className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={docName}
                   onChange={(e) => setDocName(e.target.value)}
@@ -516,12 +528,45 @@ const DocumentsPage = () => {
                 />
               </div>
 
+              {docType === 'certificate' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Issuing Organization *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Amazon Web Services"
+                      className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={issuingOrganization}
+                      onChange={(e) => setIssuingOrganization(e.target.value)}
+                      disabled={isLoading}
+                      aria-required="true"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Credential URL (optional)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="e.g. https://www.credly.com/badges/123"
+                      className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={credentialUrl}
+                      onChange={(e) => setCredentialUrl(e.target.value)}
+                      disabled={isLoading}
+                    />
+                  </div>
+                </>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Description/Reflection *
                 </label>
                 <textarea
-                  placeholder="Describe this document and your reflections..."
+                  placeholder={docType === 'certificate' ? 'Describe this certificate and its significance...' : 'Describe this document and your reflections...'}
                   className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   rows={3}
                   value={description}
@@ -596,7 +641,6 @@ const DocumentsPage = () => {
                   <option value="certificates">Certificates</option>
                   <option value="transcripts">Transcripts</option>
                   <option value="projects">Projects</option>
-                  <option value="ai-ml">AI/ML</option>
                 </select>
               </div>
 
@@ -610,8 +654,8 @@ const DocumentsPage = () => {
                     ? 'Updating...'
                     : 'Uploading...'
                   : editingDocId
-                  ? 'Update Document'
-                  : 'Upload Document'}
+                  ? `Update ${docType === 'certificate' ? 'Certificate' : 'Document'}`
+                  : `Upload ${docType === 'certificate' ? 'Certificate' : 'Document'}`}
               </button>
             </div>
           </div>

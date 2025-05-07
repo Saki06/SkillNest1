@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import API from '../../api/axios';
-import { motion } from 'framer-motion'; // For animations
+import { motion } from 'framer-motion';
 
 const PostsPage = () => {
   const [posts, setPosts] = useState([]);
@@ -15,8 +15,13 @@ const PostsPage = () => {
     visibility: 'public',
     addToPortfolio: false,
     files: [],
+    existingMedia: [],
+    removedMedia: [],
   });
-  const [error, setError] = useState(null); // Add error state for better UX
+  const [error, setError] = useState(null);
+
+  // Base URL for media
+  const BASE_URL = 'http://localhost:8000';
 
   useEffect(() => {
     const userData = JSON.parse(localStorage.getItem('user'));
@@ -58,6 +63,8 @@ const PostsPage = () => {
       visibility: post.visibility,
       addToPortfolio: post.addToPortfolio,
       files: [],
+      existingMedia: post.mediaUrls || [],
+      removedMedia: [],
     });
     setIsEditModalOpen(true);
   };
@@ -72,18 +79,36 @@ const PostsPage = () => {
     formData.append('visibility', editForm.visibility);
     formData.append('addToPortfolio', editForm.addToPortfolio);
     formData.append('userId', user.id || user._id);
-    editForm.files.forEach((file) => formData.append('files', file));
+
+    // Append removedMedia if there are any
+    if (editForm.removedMedia.length > 0) {
+      formData.append('removedMedia', JSON.stringify(editForm.removedMedia));
+    }
+
+    // Append new files
+    editForm.files.forEach((file) => {
+      formData.append('files', file);
+    });
 
     try {
       const res = await API.put(`/auth/posts/${currentPost.id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+      
       setPosts((prev) =>
         prev.map((post) => (post.id === currentPost.id ? res.data : post))
       );
       setIsEditModalOpen(false);
       setCurrentPost(null);
-      setEditForm({ title: '', content: '', visibility: 'public', addToPortfolio: false, files: [] });
+      setEditForm({ 
+        title: '', 
+        content: '', 
+        visibility: 'public', 
+        addToPortfolio: false, 
+        files: [], 
+        existingMedia: [], 
+        removedMedia: [] 
+      });
     } catch (error) {
       console.error('Failed to update post:', error);
       setError('Failed to update post. Please try again.');
@@ -91,21 +116,47 @@ const PostsPage = () => {
   };
 
   const handleFileChange = (e) => {
-    setEditForm((prev) => ({ ...prev, files: Array.from(e.target.files) }));
+    setEditForm((prev) => ({
+      ...prev,
+      files: [...prev.files, ...Array.from(e.target.files)]
+    }));
   };
 
-  const getFileExtension = (filename) =>
-    filename?.split('.').pop()?.toLowerCase() || '';
+  const handleRemoveMedia = (mediaUrl, isExisting) => {
+    if (isExisting && !window.confirm('Are you sure you want to remove this media file? This action cannot be undone.')) {
+      return;
+    }
+    if (isExisting) {
+      setEditForm((prev) => ({
+        ...prev,
+        existingMedia: prev.existingMedia.filter((url) => url !== mediaUrl),
+        removedMedia: [...prev.removedMedia, mediaUrl],
+      }));
+    } else {
+      // Remove newly added file that hasn't been uploaded yet
+      setEditForm((prev) => ({
+        ...prev,
+        files: prev.files.filter((file) => file.name !== mediaUrl),
+      }));
+    }
+  };
 
-  const renderMedia = (url, idx) => {
-    if (!url) return null;
-    const ext = getFileExtension(url);
+  const getFileExtension = (filename) => {
+    if (!filename) return '';
+    const name = typeof filename === 'string' ? filename : filename.name;
+    return name.split('.').pop()?.toLowerCase() || '';
+  };
 
-    // Prepend base URL to relative paths
-    const baseUrl = 'http://localhost:8000';
-    const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+  const getMediaUrl = (media) => {
+    if (typeof media === 'string') {
+      return media.startsWith('http') ? media : `${BASE_URL}${media}`;
+    }
+    return URL.createObjectURL(media);
+  };
 
-    console.log(`Rendering media with URL: ${fullUrl}`);
+  const renderMedia = (media, idx, isEditable = false) => {
+    const url = getMediaUrl(media);
+    const ext = getFileExtension(media);
 
     const cardVariants = {
       rest: { scale: 1, boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' },
@@ -118,8 +169,8 @@ const PostsPage = () => {
 
     return (
       <motion.div
-        key={fullUrl}
-        className="w-full rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg"
+        key={idx}
+        className="w-full rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg relative"
         style={{ aspectRatio: '4 / 3' }}
         variants={cardVariants}
         initial="rest"
@@ -127,7 +178,7 @@ const PostsPage = () => {
       >
         {ext === 'pdf' ? (
           <a
-            href={fullUrl}
+            href={url}
             target="_blank"
             rel="noreferrer"
             className="relative flex flex-col items-center justify-center h-full p-6 text-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 transition-colors"
@@ -160,7 +211,7 @@ const PostsPage = () => {
           </a>
         ) : ['jpg', 'jpeg', 'png', 'gif'].includes(ext) ? (
           <img
-            src={fullUrl}
+            src={url}
             alt={`Post media ${idx + 1}`}
             className="w-full h-full object-cover object-center"
             onError={(e) => (e.target.src = '/assets/fallback-image.png')}
@@ -170,12 +221,11 @@ const PostsPage = () => {
             <div className="absolute inset-0 bg-white/30 dark:bg-gray-900/30 backdrop-blur-sm rounded-xl" />
             <div className="relative z-10 w-full h-3/4">
               <video
-                src={fullUrl}
+                src={url}
                 controls
                 preload="metadata"
                 className="w-full h-full object-cover object-center rounded-lg"
                 aria-label="Play video content"
-                onError={() => console.error(`Failed to load video from ${fullUrl}`)}
               />
             </div>
             <span className="relative z-10 mt-2 text-sm font-medium text-gray-800 dark:text-gray-100">
@@ -188,20 +238,42 @@ const PostsPage = () => {
             <span className="text-sm text-gray-500 dark:text-gray-400">Unsupported file</span>
           </div>
         )}
+
+        {isEditable && (
+          <button
+            type="button"
+            onClick={() => handleRemoveMedia(media, typeof media === 'string')}
+            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+            aria-label="Remove media"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        )}
       </motion.div>
     );
   };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 max-w-6xl mx-auto">
-      {/* Error Message */}
       {error && (
         <div className="mb-4 p-4 bg-red-100 text-red-700 rounded">
           {error}
         </div>
       )}
 
-      {/* Header Section */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-2">MY SN POSTS</h1>
         <p className="text-sm text-gray-600">
@@ -210,7 +282,6 @@ const PostsPage = () => {
         </p>
       </div>
 
-      {/* Posts Grid */}
       {posts.length === 0 ? (
         <div className="border p-6 rounded-lg text-center text-gray-400 text-sm bg-gray-50 mb-6">
           You haven't added any posts to your public SkillNest profile.
@@ -225,12 +296,20 @@ const PostsPage = () => {
                 user={user}
                 handleEdit={handleEdit}
                 handleDelete={handleDelete}
-                renderMedia={renderMedia} // Pass renderMedia to PostCard
+                renderMedia={renderMedia}
               />
             ))}
           </div>
+          {posts.length > 2 && !showAllPosts && (
+            <button
+              onClick={() => setShowAllPosts(true)}
+              className="w-full py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-lg text-sm font-medium transition-colors"
+            >
+              Show all posts ({posts.length - 2} more)
+            </button>
+          )}
           {posts.length > 2 && showAllPosts && (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {posts.slice(2).map((post) => (
                 <PostCard
                   key={post.id}
@@ -246,76 +325,127 @@ const PostsPage = () => {
         </div>
       )}
 
-      {/* Edit Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-lg">
-            <h2 className="text-xl font-bold mb-4">Edit Post</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Edit Post</h2>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
             <form onSubmit={handleUpdate}>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
                 <input
                   type="text"
                   value={editForm.title}
                   onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
+              
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Content</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
                 <textarea
                   value={editForm.content}
                   onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows="4"
                   required
                 />
               </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Visibility</label>
-                <select
-                  value={editForm.visibility}
-                  onChange={(e) => setEditForm({ ...editForm, visibility: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="public">Public</option>
-                  <option value="private">Private</option>
-                  <option value="friends">Friends</option>
-                </select>
-              </div>
-              <div className="mb-4">
-                <label className="flex items-center">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
+                  <select
+                    value={editForm.visibility}
+                    onChange={(e) => setEditForm({ ...editForm, visibility: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                    <option value="friends">Friends</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center">
                   <input
                     type="checkbox"
+                    id="addToPortfolio"
                     checked={editForm.addToPortfolio}
                     onChange={(e) => setEditForm({ ...editForm, addToPortfolio: e.target.checked })}
-                    className="mr-2 rounded border-gray-300 focus:ring-blue-500"
+                    className="mr-2 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
                   />
-                  <span className="text-sm text-gray-700">Add to Portfolio</span>
-                </label>
+                  <label htmlFor="addToPortfolio" className="text-sm text-gray-700">
+                    Add to Portfolio
+                  </label>
+                </div>
               </div>
+              
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Upload New Media</label>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*,video/*,application/pdf"
-                  onChange={handleFileChange}
-                  className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Current Media</label>
+                {editForm.existingMedia.length > 0 || editForm.files.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {editForm.existingMedia.map((media, idx) => (
+                      <div key={`existing-${idx}`} className="relative">
+                        {renderMedia(media, idx, true)}
+                      </div>
+                    ))}
+                    {editForm.files.map((file, idx) => (
+                      <div key={`new-${idx}`} className="relative">
+                        {renderMedia(file, idx + editForm.existingMedia.length, true)}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No media attached.</p>
+                )}
               </div>
-              <div className="flex justify-end space-x-2">
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Upload New Media</label>
+                <div className="flex items-center">
+                  <label className="flex-1">
+                    <div className="flex flex-col items-center justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-md hover:border-gray-400 transition-colors cursor-pointer">
+                      <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <p className="text-sm text-gray-600 text-center">
+                        <span className="font-medium text-blue-500">Click to upload</span> or drag and drop
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Images, videos, PDFs (max 10MB each)</p>
+                    </div>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,application/pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 text-sm text-gray-700 border rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                 >
                   Save Changes
                 </button>
@@ -325,7 +455,6 @@ const PostsPage = () => {
         </div>
       )}
 
-      {/* Footer Links */}
       <div className="flex justify-between items-center pt-4 border-t border-gray-200">
         <Link
           to="/profile"
@@ -364,10 +493,9 @@ const PostsPage = () => {
   );
 };
 
-// PostCard component
 const PostCard = ({ post, user, handleEdit, handleDelete, renderMedia }) => {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm h-full">
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm h-full flex flex-col">
       <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-start">
         <img
           src={user.profileImage || '/assets/avatar.png'}
@@ -399,30 +527,33 @@ const PostCard = ({ post, user, handleEdit, handleDelete, renderMedia }) => {
           </div>
         </div>
       </div>
-      <div className="p-4">
+
+      <div className="p-4 flex-1">
         <h3 className="font-medium text-gray-800 mb-2">{post.title}</h3>
         <p className="text-gray-700 mb-4">{post.content}</p>
+        
         {post.mediaUrls?.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-            {post.mediaUrls.map(renderMedia)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+            {post.mediaUrls.map((media, idx) => renderMedia(media, idx))}
           </div>
         )}
-        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+      </div>
+      
+      <div className="p-4 border-t border-gray-100">
+        <div className="flex justify-between items-center">
           <div className="flex items-center space-x-4">
-            <div>
-              <span className="text-yellow-400">★</span>
-              <span className="text-xs text-gray-500 ml-1">Like</span>
-            </div>
+            <button className="flex items-center space-x-1 text-gray-500 hover:text-blue-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              <span className="text-xs">Like</span>
+            </button>
           </div>
+          
           <div className="flex space-x-4">
-            {['Repost'].map((action) => (
-              <button
-                key={action}
-                className="text-xs text-blue-500 hover:text-blue-700"
-              >
-                {action}
-              </button>
-            ))}
+            <button className="text-xs text-gray-500 hover:text-blue-500">
+              Repost
+            </button>
             <button
               onClick={() => handleEdit(post)}
               className="text-xs text-blue-500 hover:text-blue-700"

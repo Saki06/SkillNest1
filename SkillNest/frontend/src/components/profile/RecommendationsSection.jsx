@@ -4,7 +4,8 @@ const RecommendationsPage = () => {
   return (
     <div className="bg-white p-6 shadow rounded-xl">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-xl font-semibold text-blue-700">Recommendations</h3>
+      <h1 className="text-2xl font-bold text-gray-800">Recommendations</h1>
+        
         <button className="text-sm text-blue-600 hover:underline">Change Title</button>
       </div>
       <p className="text-sm text-gray-600 mb-6">

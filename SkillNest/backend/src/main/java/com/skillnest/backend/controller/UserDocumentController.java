@@ -38,30 +38,46 @@ public class UserDocumentController {
     @Autowired
     private UserDocumentRepository documentRepository;
 
-    // Upload Document
+    // Upload Document or Certificate
     @PostMapping
     public ResponseEntity<?> uploadDocument(
             @PathVariable String userId,
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam("type") String type,
             @RequestParam("name") String name,
             @RequestParam("description") String description,
             @RequestParam("visibility") String visibility,
             @RequestParam(required = false) String folder,
-            @RequestParam(required = false) List<String> tags
+            @RequestParam(required = false) List<String> tags,
+            @RequestParam(value = "issuingOrganization", required = false) String issuingOrganization,
+            @RequestParam(value = "credentialUrl", required = false) String credentialUrl
     ) {
         try {
-            File directory = new File(uploadDir);
-            if (!directory.exists()) {
-                directory.mkdirs();
+            if (!type.equals("document") && !type.equals("certificate")) {
+                return ResponseEntity.badRequest().body("Invalid type: must be 'document' or 'certificate'");
             }
 
-            String filename = UUID.randomUUID() + "_" + StringUtils.cleanPath(file.getOriginalFilename());
-            String filePath = uploadDir + File.separator + filename;
+            if (type.equals("certificate") && issuingOrganization == null) {
+                return ResponseEntity.badRequest().body("Issuing organization is required for certificates");
+            }
 
-            Files.copy(file.getInputStream(), Paths.get(filePath));
+            String filePath = null;
+            if (file != null && !file.isEmpty()) {
+                File directory = new File(uploadDir);
+                if (!directory.exists()) {
+                    directory.mkdirs();
+                }
+
+                String filename = UUID.randomUUID() + "_" + StringUtils.cleanPath(file.getOriginalFilename());
+                filePath = uploadDir + File.separator + filename;
+                Files.copy(file.getInputStream(), Paths.get(filePath));
+            } else if (type.equals("document")) {
+                return ResponseEntity.badRequest().body("File is required for documents");
+            }
 
             UserDocument doc = new UserDocument();
             doc.setUserId(userId);
+            doc.setType(type);
             doc.setName(name);
             doc.setDescription(description);
             doc.setVisibility(visibility);
@@ -69,6 +85,11 @@ public class UserDocumentController {
             doc.setTags(tags);
             doc.setFilePath(filePath);
             doc.setUploadedAt(LocalDateTime.now());
+
+            if (type.equals("certificate")) {
+                doc.setIssuingOrganization(issuingOrganization);
+                doc.setCredentialUrl(credentialUrl);
+            }
 
             UserDocument saved = documentRepository.save(doc);
             return ResponseEntity.ok(saved);
@@ -89,8 +110,10 @@ public class UserDocumentController {
         return documentRepository.findById(docId)
                 .map(doc -> {
                     try {
-                        Path path = Paths.get(doc.getFilePath());
-                        Files.deleteIfExists(path);
+                        if (doc.getFilePath() != null) {
+                            Path path = Paths.get(doc.getFilePath());
+                            Files.deleteIfExists(path);
+                        }
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -100,24 +123,67 @@ public class UserDocumentController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Update Document
+    // Update Document or Certificate
     @PutMapping("/{docId}")
     public ResponseEntity<?> updateDocument(
             @PathVariable String docId,
-            @RequestParam String name,
-            @RequestParam String description,
-            @RequestParam String visibility,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam("type") String type,
+            @RequestParam("name") String name,
+            @RequestParam("description") String description,
+            @RequestParam("visibility") String visibility,
             @RequestParam(required = false) String folder,
-            @RequestParam(required = false) List<String> tags
+            @RequestParam(required = false) List<String> tags,
+            @RequestParam(value = "issuingOrganization", required = false) String issuingOrganization,
+            @RequestParam(value = "credentialUrl", required = false) String credentialUrl
     ) {
         return documentRepository.findById(docId)
                 .map(doc -> {
-                    doc.setName(name);
-                    doc.setDescription(description);
-                    doc.setVisibility(visibility);
-                    doc.setFolder(folder);
-                    doc.setTags(tags);
-                    return ResponseEntity.ok(documentRepository.save(doc));
+                    if (!type.equals("document") && !type.equals("certificate")) {
+                        return ResponseEntity.badRequest().body("Invalid type: must be 'document' or 'certificate'");
+                    }
+
+                    if (type.equals("certificate") && issuingOrganization == null) {
+                        return ResponseEntity.badRequest().body("Issuing organization is required for certificates");
+                    }
+
+                    try {
+                        String filePath = doc.getFilePath();
+                        if (file != null && !file.isEmpty()) {
+                            // Delete old file if exists
+                            if (filePath != null) {
+                                Files.deleteIfExists(Paths.get(filePath));
+                            }
+                            // Save new file
+                            File directory = new File(uploadDir);
+                            if (!directory.exists()) {
+                                directory.mkdirs();
+                            }
+                            String filename = UUID.randomUUID() + "_" + StringUtils.cleanPath(file.getOriginalFilename());
+                            filePath = uploadDir + File.separator + filename;
+                            Files.copy(file.getInputStream(), Paths.get(filePath));
+                        }
+
+                        doc.setType(type);
+                        doc.setName(name);
+                        doc.setDescription(description);
+                        doc.setVisibility(visibility);
+                        doc.setFolder(folder);
+                        doc.setTags(tags);
+                        doc.setFilePath(filePath);
+
+                        if (type.equals("certificate")) {
+                            doc.setIssuingOrganization(issuingOrganization);
+                            doc.setCredentialUrl(credentialUrl);
+                        } else {
+                            doc.setIssuingOrganization(null);
+                            doc.setCredentialUrl(null);
+                        }
+
+                        return ResponseEntity.ok(documentRepository.save(doc));
+                    } catch (IOException e) {
+                        return ResponseEntity.status(500).body("Failed to update file: " + e.getMessage());
+                    }
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
