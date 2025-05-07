@@ -304,6 +304,27 @@ public class AuthController {
         }
     }
 
+    @DeleteMapping("/users/{id}/resume")
+    public ResponseEntity<?> deleteResume(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        try {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(401).body("Missing or malformed token");
+            }
+
+            String userId = jwtUtil.validateToken(authHeader.replace("Bearer ", ""));
+            if (userId == null || !userId.equals(id)) {
+                return ResponseEntity.status(403).body("Invalid or unauthorized token");
+            }
+
+            return ResponseEntity.ok(userService.deleteResume(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(404).body(e.getMessage());
+        } catch (IOException e) {
+            logger.error("Error deleting resume: {}", e.getMessage());
+            return ResponseEntity.status(500).body("Error deleting resume");
+        }
+    }
+
     @PutMapping("/users/{id}")
     public ResponseEntity<?> updateUser(@PathVariable String id, @RequestBody User user) {
         try {

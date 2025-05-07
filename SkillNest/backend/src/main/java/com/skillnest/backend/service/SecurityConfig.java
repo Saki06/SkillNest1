@@ -40,7 +40,8 @@ public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Excepti
             "/ws/**",
             "/ws/info",
             "/sockjs-node/**",
-            "/uploads/**" // 👈 ADD THIS LINE
+            "/uploads/**",
+            "/search/**"// 👈 ADD THIS LINE
         ).permitAll()
         .anyRequest().authenticated()
         .and()

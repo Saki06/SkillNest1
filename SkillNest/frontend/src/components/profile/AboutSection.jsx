@@ -4,10 +4,10 @@ import API from '../../api/axios';
 import { toast } from 'react-toastify';
 import { countries } from 'countries-list';
 import { Country, State, City } from "country-state-city";
-import { PlusCircle, Edit, X, Check } from 'lucide-react';
+import { PlusCircle, Edit, X, Check, Trash2 } from 'lucide-react';
 
 const AboutPage = () => {
-  const { user } = useOutletContext();
+  const { user, fetchUser } = useOutletContext();
   const [form, setForm] = useState({
     bio: '',
     tagline: '',
@@ -51,7 +51,6 @@ const AboutPage = () => {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Initialize form with user data
   useEffect(() => {
     if (user) {
       setForm({
@@ -71,29 +70,21 @@ const AboutPage = () => {
     }
   }, [user]);
 
-  // Update states when country changes
   useEffect(() => {
     if (form.country) {
       const stateList = State.getStatesOfCountry(form.country);
       setStates(stateList || []);
-      setForm(prev => ({ ...prev, state: '', city: '' }));
-      setCities([]);
+      if (form.state) {
+        const cityList = City.getCitiesOfState(form.country, form.state);
+        setCities(cityList || []);
+      } else {
+        setCities([]);
+      }
     } else {
       setStates([]);
       setCities([]);
     }
-  }, [form.country]);
-
-  // Update cities when state changes
-  useEffect(() => {
-    if (form.state && form.country) {
-      const cityList = City.getCitiesOfState(form.country, form.state);
-      setCities(cityList || []);
-      setForm(prev => ({ ...prev, city: '' }));
-    } else {
-      setCities([]);
-    }
-  }, [form.state, form.country]);
+  }, [form.country, form.state]);
 
   const handleChange = e => {
     const { name, value } = e.target;
@@ -131,6 +122,7 @@ const AboutPage = () => {
         throw new Error('No user data returned');
       }
       
+      localStorage.setItem('user', JSON.stringify(res.data));
       return res.data;
     } catch (error) {
       console.error('Failed to fetch user:', error);
@@ -146,9 +138,12 @@ const AboutPage = () => {
       if (!token) throw new Error('Please log in');
       
       const userId = user._id || user.id;
-      const payload = { ...form };
+      const payload = {
+        ...form,
+        name: user.name || '',
+        headline: user.headline || '',
+      };
       
-      // Don't send empty fields that shouldn't be updated
       Object.keys(payload).forEach(key => {
         if (payload[key] === '') {
           delete payload[key];
@@ -164,6 +159,8 @@ const AboutPage = () => {
         ...prev,
         ...updatedUser
       }));
+      
+      await fetchUser();
       
       toast.success('Profile updated successfully!');
       setEditSection(null);
@@ -209,12 +206,50 @@ const AboutPage = () => {
       }));
       setResumeFile(null);
       
+      await fetchUser();
+      
       toast.success('Resume uploaded successfully!');
     } catch (error) {
       console.error('Resume upload failed:', error);
       const errorMessage = error.response?.data?.message || 
                          error.message || 
                          'Failed to upload resume';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteResume = async () => {
+    const confirmDelete = window.confirm('Are you sure you want to remove your resume? This action cannot be undone.');
+    if (!confirmDelete) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Please log in');
+      
+      const userId = user._id || user.id;
+      const res = await API.delete(`/auth/users/${userId}/resume`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      const updatedUser = await fetchUserData();
+      setForm(prev => ({
+        ...prev,
+        resume: updatedUser.resume
+      }));
+      
+      await fetchUser();
+      
+      toast.success('Resume removed successfully!');
+    } catch (error) {
+      console.error('Resume deletion failed:', error);
+      const errorMessage = error.response?.data?.message || 
+                         error.message || 
+                         'Failed to remove resume';
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -232,7 +267,6 @@ const AboutPage = () => {
     setResumeFile(null);
     setError(null);
     
-    // Reset form to current user data
     if (user) {
       setForm({
         bio: user.bio || '',
@@ -269,7 +303,6 @@ const AboutPage = () => {
       
       <h1 className="text-3xl font-bold mb-8">About</h1>
       
-      {/* About Section */}
       <section className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-semibold">About</h2>
@@ -340,8 +373,6 @@ const AboutPage = () => {
             <div className="flex items-center gap-4">
               <a 
                 href={`http://localhost:8000/uploads/${encodeURIComponent(form.resume.replace(/^\/?uploads\//, ''))}`}
-
-
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="text-blue-600 hover:underline"
@@ -355,6 +386,14 @@ const AboutPage = () => {
                 aria-label="Update resume"
               >
                 <Edit size={16} /> Update
+              </button>
+              <button
+                className="text-red-600 hover:underline flex items-center gap-1"
+                onClick={handleDeleteResume}
+                disabled={isLoading}
+                aria-label="Remove resume"
+              >
+                <Trash2 size={16} /> Remove
               </button>
             </div>
           ) : (
@@ -440,7 +479,6 @@ const AboutPage = () => {
 
       <hr className="my-6 border-t border-gray-300" />
 
-      {/* Basic Information Section */}
       <section className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-semibold">Basic Information</h2>
@@ -530,21 +568,39 @@ const AboutPage = () => {
             
             <div>
               <label className="block font-medium mb-1">City</label>
-              <select
-                name="city"
-                value={form.city}
-                onChange={handleChange}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
-                disabled={!form.state}
-                aria-label="Select city"
-              >
-                <option value="">Select city</option>
-                {cities.map(city => (
-                  <option key={city.name} value={city.name}>
-                    {city.name}
-                  </option>
-                ))}
-              </select>
+              {cities.length > 0 ? (
+                <select
+                  name="city"
+                  value={form.city}
+                  onChange={handleChange}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  disabled={!form.state}
+                  aria-label="Select city"
+                >
+                  <option value="">Select city</option>
+                  {cities.map(city => (
+                    <option key={city.name} value={city.name}>
+                      {city.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  name="city"
+                  value={form.city}
+                  onChange={handleChange}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter city"
+                  disabled={!form.state}
+                  aria-label="Enter city"
+                />
+              )}
+              {form.state && cities.length === 0 && (
+                <p className="text-sm text-gray-500 mt-1">
+                  No cities available for this state. Please enter manually.
+                </p>
+              )}
             </div>
             
             <div>
@@ -611,20 +667,26 @@ const AboutPage = () => {
             <div>
               <p className="font-medium">Country/Region:</p>
               <p className="text-gray-700">
-                {countryList.find(c => c.code === form.country)?.name || 'Not specified'}
+                {form.country ? countryList.find(c => c.code === form.country)?.name || 'Not specified' : 'Not specified'}
               </p>
             </div>
             
             <div>
               <p className="font-medium">State/Province:</p>
               <p className="text-gray-700">
-                {states.find(s => s.isoCode === form.state)?.name || form.state || 'Not specified'}
+                {form.state && form.country ? 
+                  State.getStatesOfCountry(form.country).find(s => s.isoCode === form.state)?.name || form.state || 'Not specified' 
+                  : 'Not specified'}
               </p>
             </div>
             
             <div>
               <p className="font-medium">City:</p>
-              <p className="text-gray-700">{form.city || 'Not specified'}</p>
+              <p className="text-gray-700">
+                {form.city && form.state && form.country ?
+                  (City.getCitiesOfState(form.country, form.state).find(c => c.name === form.city)?.name || form.city || 'Not specified')
+                  : 'Not specified'}
+              </p>
             </div>
             
             <div>
@@ -672,7 +734,6 @@ const AboutPage = () => {
 
       <hr className="my-6 border-t border-gray-300" />
 
-      {/* Internship Section */}
       <section>
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-xl font-semibold">Internship/Tutoring</h2>

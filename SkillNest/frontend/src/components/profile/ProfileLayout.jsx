@@ -5,15 +5,13 @@ import { toast } from 'react-toastify';
 import API from '../../api/axios';
 import Navigation from '../user/Navigation';
 import defaultProfile from '../../assets/profilepicture.jpg';
-import { Upload,Trash2 } from 'lucide-react';
+import { Upload, Trash2 } from 'lucide-react';
 import AboutSection from '../profile/AboutSection';
 import SkillsSection from '../profile/SkillsSection';
 import ShowcasesesSection from '../profile/ShowcasesSection';
 import DocumentsSection from '../profile/DocumentsSection';
 import Recommendation from '../profile/RecommendationsSection';
 import PostSection from '../profile/PostsSection';
-
-
 
 const ProfileLayout = () => {
   // State management
@@ -70,7 +68,7 @@ const ProfileLayout = () => {
 
   useEffect(() => {
     fetchUser();
-  }, []);
+  }, [location.pathname]); // Re-fetch on navigation to ensure latest data
 
   // Handlers
   const handleCoverUpload = async (e) => {
@@ -325,26 +323,26 @@ const ProfileLayout = () => {
                   disabled={isLoading}
                 />
                 <div className="absolute right-4 top-4 flex gap-2">
-  <button
-    onClick={() => document.getElementById('coverUpload').click()}
-    className="p-2 rounded-full bg-white hover:bg-gray-100 text-gray-600 shadow disabled:opacity-50"
-    title="Upload Cover"
-    disabled={isLoading}
-  >
-    <Upload size={18} />
-  </button>
+                  <button
+                    onClick={() => document.getElementById('coverUpload').click()}
+                    className="p-2 rounded-full bg-white hover:bg-gray-100 text-gray-600 shadow disabled:opacity-50"
+                    title="Upload Cover"
+                    disabled={isLoading}
+                  >
+                    <Upload size={18} />
+                  </button>
 
-  {user.coverImage && (
-    <button
-      onClick={handleDeleteCover}
-      className="p-2 rounded-full bg-white hover:bg-red-50 text-red-600 shadow disabled:opacity-50"
-      title="Remove Cover"
-      disabled={isLoading}
-    >
-      <Trash2 size={18} />
-    </button>
-  )}
-</div>
+                  {user.coverImage && (
+                    <button
+                      onClick={handleDeleteCover}
+                      className="p-2 rounded-full bg-white hover:bg-red-50 text-red-600 shadow disabled:opacity-50"
+                      title="Remove Cover"
+                      disabled={isLoading}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Profile Details */}
