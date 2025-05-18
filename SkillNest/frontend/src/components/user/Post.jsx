@@ -6,9 +6,11 @@ import {
   Plus,
   Bookmark,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import API from "../../api/axios";
 import { motion } from "framer-motion";
+import ReactCountryFlag from "react-country-flag"; // Add this import
 
 const Post = ({
   user,
@@ -81,22 +83,31 @@ const Post = ({
   };
 
   const handleCommentSubmit = async (e) => {
-    e.preventDefault();
-    if (!commentInput.trim()) return toast.error("Comment cannot be empty");
+  e.preventDefault();
+  if (!commentInput.trim()) return toast.error("Comment cannot be empty");
 
-    try {
-      const { data } = await API.post(
-        `/auth/posts/${post.id}/comment?userId=${
-          user.id
-        }&content=${encodeURIComponent(commentInput)}`
-      );
-      setComments((prev) => [data, ...prev]);
-      setCommentInput("");
-      setCurrentCommentCount((prev) => prev + 1);
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to add comment");
-    }
-  };
+  try {
+    const { data } = await API.post(
+      `/auth/posts/${post.id}/comment?userId=${user.id}&content=${encodeURIComponent(commentInput)}`
+    );
+
+    const enrichedComment = {
+      ...data,
+      user: {
+        id: user.id,
+        name: user.name,
+        profileImage: user.profileImage,
+      },
+    };
+
+    setComments((prev) => [enrichedComment, ...prev]);
+    setCommentInput("");
+    setCurrentCommentCount((prev) => prev + 1);
+  } catch (err) {
+    toast.error(err.response?.data?.message || "Failed to add comment");
+  }
+};
+
 
   const handleEditCommentSubmit = async (e, commentId) => {
     e.preventDefault();
@@ -139,6 +150,7 @@ const Post = ({
       if (!token) return toast.error("Please log in to delete posts");
 
       await API.delete(`/auth/posts/${post.id}`);
+      onPostDeleted?.(post.id);
       toast.success("Post deleted successfully");
       onPostDeleted?.(post.id);
     } catch (err) {
@@ -149,48 +161,36 @@ const Post = ({
   };
 
   const handleFollow = async (e, userIdToFollow) => {
-    e.preventDefault();
-    if (!userIdToFollow || !localStorage.getItem("token") || isFollowLoading) {
-      toast.error(
-        !userIdToFollow ? "Invalid user ID" : "Please log in to follow users"
-      );
-      return;
-    }
+  e.preventDefault();
+  if (!userIdToFollow || !localStorage.getItem("token") || isFollowLoading) return;
 
-    setIsFollowLoading(true);
-    const config = {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-    };
-    const payload = isUserFollowing
-      ? { userIdToUnfollow: userIdToFollow }
-      : { userIdToFollow };
+  const newFollowState = !isUserFollowing;
 
-    try {
-      const { data, status } = await API.post(
-        isUserFollowing ? "/auth/unfollow" : "/auth/follow",
-        payload,
-        config
-      );
-      if (status === 200) {
-        setIsUserFollowing(!isUserFollowing);
-        updateFollowingState(userIdToFollow, !isUserFollowing);
-        if (data.following) {
-          setFollowing(new Set(data.following));
-        } else {
-          await refreshFollowing();
-        }
-        toast.success(
-          isUserFollowing ? "Unfollowed successfully" : "Followed successfully"
-        );
-      }
-    } catch (err) {
-      toast.error(
-        err.response?.data?.message || "Failed to follow/unfollow user"
-      );
-    } finally {
-      setIsFollowLoading(false);
-    }
+  setIsUserFollowing(newFollowState);
+  updateFollowingState(userIdToFollow, newFollowState);
+
+  setIsFollowLoading(true);
+
+  const config = {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   };
+
+  const payload = newFollowState
+    ? { userIdToFollow }
+    : { userIdToUnfollow: userIdToFollow };
+  const endpoint = newFollowState ? "/auth/follow" : "/auth/unfollow";
+
+  try {
+    await API.post(endpoint, payload, config);
+
+  } catch (err) {
+    console.error("Follow/Unfollow error:", err.response?.data || err.message);
+    setIsUserFollowing(!newFollowState);
+    updateFollowingState(userIdToFollow, !newFollowState);
+  } finally {
+    setIsFollowLoading(false);
+  }
+};
 
   const getFileExtension = (filename) =>
     filename?.split(".").pop()?.toLowerCase() || "";
@@ -206,11 +206,9 @@ const Post = ({
     if (!url) return null;
     const ext = getFileExtension(url);
 
-    // Prepend base URL to relative paths
     const baseUrl = "http://localhost:8000";
     const fullUrl = url.startsWith("http") ? url : `${baseUrl}${url}`;
 
-    // Animation variants for subtle hover effect
     const cardVariants = {
       rest: { scale: 1, boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)" },
       hover: {
@@ -299,7 +297,6 @@ const Post = ({
     );
   };
 
-  // Separate images/videos from PDFs
   const visualMediaUrls = mediaUrls.filter((url) =>
     ["jpg", "jpeg", "png", "gif", "mp4", "webm", "mov"].includes(
       getFileExtension(url)
@@ -319,14 +316,22 @@ const Post = ({
             />
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-800">
+                <Link
+                  to={isOwnPost ? "/profile" : `/profile/${postUser._id || postUser.id}`}
+                  className="font-semibold text-gray-800 hover:underline"
+                >
                   {postUser.name || "Unknown User"}
-                </span>
+                </Link>
                 {postUser.country && (
-                  <img
-                    src={`/flags/${postUser.country}.png`}
-                    alt={`${postUser.country} flag`}
-                    className="w-5 h-3"
+                  <ReactCountryFlag
+                    countryCode={postUser.country}
+                    svg
+                    style={{
+                      width: "1.25rem",
+                      height: "0.75rem",
+                    }}
+                    title={`${postUser.country} flag`}
+                    aria-label={`${postUser.country} flag`}
                   />
                 )}
                 {postUser.isMember && (
