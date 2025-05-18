@@ -64,11 +64,11 @@ const UserProfile = ({ username, points }) => {
           {user.headline || 'No headline available'}
         </p>
         {/* Saved Posts Section */}
-        <div className="flex items-center gap-2 mb-3 mt-3">
+        {/* <div className="flex items-center gap-2 mb-3 mt-3">
           <Bookmark className="h-5 w-5 text-gray-600" />
           <span className="text-sm font-medium text-gray-700">Saved</span>
           <span className="text-sm text-gray-600">10 posts</span>
-        </div>
+        </div> */}
 
    
       

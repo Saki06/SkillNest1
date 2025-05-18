@@ -12,6 +12,7 @@ import RecommendationsSection from './components/profile/RecommendationsSection'
 import PostsSection from './components/profile/PostsSection';
 import SearchPage from './pages/SearchPage';
 import Index from './pages/Index';
+import PublicProfilePage from "./components/profile/PublicProfilePage"
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -32,6 +33,7 @@ function App() {
           <Route path="recommendations" element={<RecommendationsSection />} />
           <Route path="posts" element={<PostsSection />} />
         </Route>
+        <Route path="/profile/:userId" element={<PublicProfilePage />} />
         <Route path="/user" element={<Index />} />
         <Route path="/search" element={<SearchPage />} />
       </Routes>
