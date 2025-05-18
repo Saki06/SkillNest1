@@ -1,4 +1,3 @@
-// src/main/java/com/skillnest/backend/model/Notification.java
 package com.skillnest.backend.model;
 
 import java.time.LocalDateTime;
@@ -11,17 +10,17 @@ public class Notification {
 
     @Id
     private String id;
-    private String userId; // Recipient (post owner)
-    private String senderId; // User who liked or commented
-    private String type; // e.g., "LIKE", "COMMENT"
-    private String message; // e.g., "John liked your post"
-    private String postId; // Reference to the post
-    private boolean isRead;
+    private String userId;
+    private String senderId;
+    private String type;
+    private String message;
+    private String postId;
+    private boolean isSeen;
     private LocalDateTime createdAt;
 
     public Notification() {
         this.createdAt = LocalDateTime.now();
-        this.isRead = false;
+        this.isSeen = false;
     }
 
     public Notification(String userId, String senderId, String type, String message, String postId) {
@@ -31,10 +30,9 @@ public class Notification {
         this.message = message;
         this.postId = postId;
         this.createdAt = LocalDateTime.now();
-        this.isRead = false;
+        this.isSeen = false;
     }
 
-    // Getters and setters
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getUserId() { return userId; }
@@ -47,8 +45,8 @@ public class Notification {
     public void setMessage(String message) { this.message = message; }
     public String getPostId() { return postId; }
     public void setPostId(String postId) { this.postId = postId; }
-    public boolean isRead() { return isRead; }
-    public void setRead(boolean read) { isRead = read; }
+    public boolean isSeen() { return isSeen; }
+    public void setSeen(boolean seen) { this.isSeen = seen; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }
